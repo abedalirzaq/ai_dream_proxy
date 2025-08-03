@@ -6,7 +6,7 @@ require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 3000;
 // const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
-const DEEPSEEK_API_KEY = "sk-9af452006b0dfbd549a88a1642866673edfa";
+const DEEPSEEK_API_KEY = "sk-66807314afcf4c31b35465c35d066286";
 
 app.use(cors());
 app.use(express.json());
