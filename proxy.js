@@ -5,60 +5,74 @@ require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 3000;
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
+// const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
+const DEEPSEEK_API_KEY = "sk-9af452006b0dfbd549a88a1642866673edfa";
 
 app.use(cors());
 app.use(express.json());
 
-app.post('/proxy', async (req, res) => {
+// API جديدة: /chat
+app.post('/chat', async (req, res) => {
+  const { message } = req.body;
+
+  // تحقق من النص
+  if (!message || message.trim() === '' || message.length > 400) {
+    return res.status(400).json({ error: 'الرسالة فارغة أو طويلة جدًا' });
+  }
+
   try {
-    const { url, body } = req.body;
-    
-    if (!url) {
-      return res.status(400).json({ error: 'URL required' });
-    }
+    const response = await axios({
+      method: 'post',
+      url: 'https://api.deepseek.com/v1/chat/completions',
+      data: {
+        model: "deepseek-chat",
+        messages: [
+          {
+            role: "user",
+            content: message
+          },
+          {
+            role: "system",
+            content: "فسر الأحلام فقط وفق ابن سيرين باختصار لا يتجاوز 350 حرفًا بنص متكامل دون تعداد نقطي، واعتذر عن أي سؤال خارج تفسير الأحلام."
+          }
+        ],
+        stream: true
+      },
+      headers: {
+        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream'
+      },
+      responseType: 'stream'
+    });
 
-    const isStream = body?.stream === true;
+    // إعداد headers للإرجاع بتقنية SSE
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive'
+    });
 
-    if (isStream) {
-      const response = await axios({
-        method: 'post',
-        url: url,
-        data: body,
-        headers: {
-          'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream'
-        },
-        responseType: 'stream'
-      });
+    // تمرير الرد من DeepSeek مباشرة إلى العميل
+    response.data.on('data', (chunk) => {
+      res.write(chunk);
+    });
 
-      res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive'
-      });
+    response.data.on('end', () => {
+      res.end();
+    });
 
-      response.data.pipe(res);
-    } else {
-      const response = await axios.post(url, body, {
-        headers: {
-          'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      });
+    response.data.on('error', (err) => {
+      console.error("Stream error:", err);
+      res.end();
+    });
 
-      res.json(response.data);
-    }
   } catch (err) {
-    if (err.response) {
-      res.status(err.response.status).json(err.response.data);
-    } else {
-      res.status(500).json({ error: 'Request failed' });
-    }
+    console.error("Request failed:", err.response?.data || err.message);
+    res.status(500).json({ error: 'فشل الاتصال بـ DeepSeek' });
   }
 });
 
 app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+  console.log(`Proxy server running on port ${port}`);
 });
